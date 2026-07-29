@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.services)
     alias(libs.plugins.hilt.android)
@@ -39,7 +40,9 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
     }
 }
-
+hilt {
+    enableAggregatingTask = false
+}
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
@@ -67,4 +70,12 @@ dependencies {
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.kotlinx.coroutines.play.services)
+
+    // Room Database
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    ksp("androidx.room:room-compiler:2.6.1")
+
+    // Material Icons Extended
+    implementation("androidx.compose.material:material-icons-extended")
 }

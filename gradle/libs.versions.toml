@@ -8,7 +8,7 @@ lifecycleRuntimeKtx = "2.6.1"
 activityCompose = "1.8.0"
 kotlin = "2.2.10"
 composeBom = "2026.02.01"
-hilt = "2.51.1"
+hilt = "2.58"
 ksp = "2.2.10-2.0.2"
 navigationCompose = "2.8.0"
 hiltNavigationCompose = "1.2.0"
@@ -47,3 +47,4 @@ kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "ko
 google-services = { id = "com.google.gms.google-services", version = "4.5.0" }
 hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }

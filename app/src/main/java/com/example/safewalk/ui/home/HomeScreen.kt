@@ -1,15 +1,21 @@
 package com.example.safewalk.ui.home
 
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Shield
@@ -20,7 +26,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -29,6 +34,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.safewalk.FakeCallActivity
+import com.example.safewalk.service.ShakeMonitorService
 import com.example.safewalk.ui.sos.SosState
 import com.example.safewalk.ui.sos.SosViewModel
 import com.google.firebase.auth.FirebaseAuth
@@ -54,6 +61,38 @@ fun HomeScreen(
     val primaryColor = Color(0xFFBB86FC)
     val accentGreen = Color(0xFF03DAC6)
 
+    // Shared preferences to persist the toggle state
+    val sharedPrefs = remember { context.getSharedPreferences("safewalk_prefs", Context.MODE_PRIVATE) }
+    var isShakeEnabled by remember { mutableStateOf(sharedPrefs.getBoolean("shake_enabled", false)) }
+
+    val toggleShakeService = { enabled: Boolean ->
+        isShakeEnabled = enabled
+        sharedPrefs.edit().putBoolean("shake_enabled", enabled).apply()
+        val intent = Intent(context, ShakeMonitorService::class.java)
+        if (enabled) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        } else {
+            context.stopService(intent)
+        }
+    }
+
+    // Sync service state on launch
+    LaunchedEffect(Unit) {
+        val enabled = sharedPrefs.getBoolean("shake_enabled", false)
+        val intent = Intent(context, ShakeMonitorService::class.java)
+        if (enabled) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+    }
+
     val permissions = arrayOf(
         android.Manifest.permission.ACCESS_FINE_LOCATION,
         android.Manifest.permission.ACCESS_COARSE_LOCATION
@@ -67,7 +106,7 @@ fun HomeScreen(
         )
     }
 
-    val launcher = rememberLauncherForActivityResult(
+    val locationLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
         hasLocationPermission = results.values.all { it }
@@ -75,6 +114,22 @@ fun HomeScreen(
             sosViewModel.triggerSos("manual")
         } else {
             Toast.makeText(context, "Location permission is required for SOS alerts", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    val notificationPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        android.Manifest.permission.POST_NOTIFICATIONS
+    } else {
+        null
+    }
+
+    val notificationLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            toggleShakeService(true)
+        } else {
+            Toast.makeText(context, "Notification permission is required for background protection", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -98,6 +153,8 @@ fun HomeScreen(
                 },
                 actions = {
                     IconButton(onClick = {
+                        // Make sure we stop shake monitor service when signing out
+                        toggleShakeService(false)
                         auth.signOut()
                         onSignOut()
                     }) {
@@ -119,8 +176,9 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp),
+                .padding(horizontal = 24.dp, vertical = 12.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Header Welcome Area
@@ -128,12 +186,12 @@ fun HomeScreen(
                 Text(
                     text = "Welcome,",
                     color = Color.LightGray,
-                    fontSize = 18.sp
+                    fontSize = 16.sp
                 )
                 Text(
                     text = displayName,
                     color = Color.White,
-                    fontSize = 28.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -148,38 +206,38 @@ fun HomeScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(20.dp),
+                        .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = Icons.Default.Shield,
                         contentDescription = "Shield Icon",
                         tint = accentGreen,
-                        modifier = Modifier.size(40.dp)
+                        modifier = Modifier.size(36.dp)
                     )
-                    Spacer(modifier = Modifier.width(16.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
                             text = "Status: Protected",
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
-                            fontSize = 16.sp
+                            fontSize = 15.sp
                         )
                         Text(
-                            text = "GPS-based emergency alert triggers ready.",
+                            text = "Emergency alert systems are fully active.",
                             color = Color.Gray,
-                            fontSize = 13.sp
+                            fontSize = 12.sp
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.weight(0.1f))
-
             // Main Pulsing SOS Trigger Button
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.size(190.dp)
+                modifier = Modifier
+                    .size(170.dp)
+                    .padding(vertical = 8.dp)
             ) {
                 val pulsingColor = when (sosState) {
                     SosState.Sending -> Color(0xFFE57373).copy(alpha = 0.2f)
@@ -188,10 +246,9 @@ fun HomeScreen(
                     else -> Color(0xFFCF6679).copy(alpha = 0.15f)
                 }
 
-                // Outer pulsing background circle
                 Box(
                     modifier = Modifier
-                        .size(190.dp)
+                        .size(170.dp)
                         .clip(CircleShape)
                         .background(pulsingColor)
                 )
@@ -202,13 +259,124 @@ fun HomeScreen(
                         if (hasLocationPermission) {
                             sosViewModel.triggerSos("manual")
                         } else {
-                            launcher.launch(permissions)
+                            locationLauncher.launch(permissions)
                         }
                     }
                 )
             }
 
-            Spacer(modifier = Modifier.weight(0.1f))
+            // Shake-to-Trigger Toggle Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp)),
+                colors = CardDefaults.cardColors(containerColor = cardBg)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = "Shake icon",
+                            tint = primaryColor,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Shake-to-Trigger",
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                fontSize = 15.sp
+                            )
+                            Text(
+                                text = "Trigger SOS automatically on shake",
+                                color = Color.Gray,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = isShakeEnabled,
+                        onCheckedChange = { checked ->
+                            if (checked) {
+                                if (notificationPermission != null &&
+                                    ContextCompat.checkSelfPermission(context, notificationPermission) != PackageManager.PERMISSION_GRANTED
+                                ) {
+                                    notificationLauncher.launch(notificationPermission)
+                                } else {
+                                    toggleShakeService(true)
+                                }
+                            } else {
+                                toggleShakeService(false)
+                            }
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = primaryColor,
+                            checkedTrackColor = primaryColor.copy(alpha = 0.5f)
+                        )
+                    )
+                }
+            }
+
+            // Fake Call Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp)),
+                colors = CardDefaults.cardColors(containerColor = cardBg)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Icon(
+                            imageVector = Icons.Default.Call,
+                            contentDescription = "Fake call icon",
+                            tint = accentGreen,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Fake Call Escape",
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                fontSize = 15.sp
+                            )
+                            Text(
+                                text = "Trigger a mock call to exit safely",
+                                color = Color.Gray,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                    Button(
+                        onClick = {
+                            val intent = Intent(context, FakeCallActivity::class.java).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            }
+                            context.startActivity(intent)
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF2D2D2D),
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Trigger", fontSize = 13.sp)
+                    }
+                }
+            }
 
             // Contacts Navigation Card
             Card(
@@ -221,7 +389,7 @@ fun HomeScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(20.dp)
+                        .padding(16.dp)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically
@@ -237,16 +405,16 @@ fun HomeScreen(
                             text = "Emergency Contacts",
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
-                            fontSize = 16.sp
+                            fontSize = 15.sp
                         )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "Add and manage trusted contacts who will receive emergency alerts when you trigger SOS.",
                         color = Color.Gray,
-                        fontSize = 13.sp
+                        fontSize = 12.sp
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     Text(
                         text = "Manage Contacts →",
                         color = primaryColor,
@@ -256,12 +424,12 @@ fun HomeScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
                 text = "SafeWalk protects you wherever you go.",
                 color = Color.DarkGray,
-                fontSize = 12.sp,
+                fontSize = 11.sp,
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center
             )
@@ -298,7 +466,7 @@ fun SosButton(
         colors = buttonColors,
         shape = CircleShape,
         modifier = Modifier
-            .size(150.dp)
+            .size(140.dp)
             .shadow(16.dp, CircleShape),
         contentPadding = PaddingValues(0.dp)
     ) {
@@ -310,9 +478,9 @@ fun SosButton(
                 imageVector = Icons.Default.Warning,
                 contentDescription = "SOS Warning symbol",
                 tint = Color.White,
-                modifier = Modifier.size(36.dp)
+                modifier = Modifier.size(32.dp)
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = when (state) {
                     SosState.Sending -> "Sending..."
@@ -321,7 +489,7 @@ fun SosButton(
                     else -> "TAP SOS"
                 },
                 fontWeight = FontWeight.ExtraBold,
-                fontSize = 18.sp,
+                fontSize = 16.sp,
                 textAlign = TextAlign.Center
             )
         }

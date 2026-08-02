@@ -63,38 +63,6 @@ fun HomeScreen(
     val primaryColor = Color(0xFFBB86FC)
     val accentGreen = Color(0xFF03DAC6)
 
-    // Shared preferences to persist the toggle state
-    val sharedPrefs = remember { context.getSharedPreferences("safewalk_prefs", Context.MODE_PRIVATE) }
-    var isShakeEnabled by remember { mutableStateOf(sharedPrefs.getBoolean("shake_enabled", false)) }
-
-    val toggleShakeService = { enabled: Boolean ->
-        isShakeEnabled = enabled
-        sharedPrefs.edit().putBoolean("shake_enabled", enabled).apply()
-        val intent = Intent(context, ShakeMonitorService::class.java)
-        if (enabled) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
-        } else {
-            context.stopService(intent)
-        }
-    }
-
-    // Sync service state on launch
-    LaunchedEffect(Unit) {
-        val enabled = sharedPrefs.getBoolean("shake_enabled", false)
-        val intent = Intent(context, ShakeMonitorService::class.java)
-        if (enabled) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
-        }
-    }
-
     val permissions = arrayOf(
         android.Manifest.permission.ACCESS_FINE_LOCATION,
         android.Manifest.permission.ACCESS_COARSE_LOCATION
@@ -106,6 +74,54 @@ fun HomeScreen(
                 ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
             }
         )
+    }
+
+    // Shared preferences to persist the toggle state
+    val sharedPrefs = remember { context.getSharedPreferences("safewalk_prefs", Context.MODE_PRIVATE) }
+    var isShakeEnabled by remember { mutableStateOf(sharedPrefs.getBoolean("shake_enabled", false)) }
+
+    val toggleShakeService = { enabled: Boolean ->
+        isShakeEnabled = enabled
+        sharedPrefs.edit().putBoolean("shake_enabled", enabled).apply()
+        val intent = Intent(context, ShakeMonitorService::class.java)
+        if (enabled) {
+            val hasLoc = permissions.all {
+                ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+            }
+            if (hasLoc) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } else {
+                Toast.makeText(context, "Location permission required to start protection", Toast.LENGTH_SHORT).show()
+                isShakeEnabled = false
+                sharedPrefs.edit().putBoolean("shake_enabled", false).apply()
+            }
+        } else {
+            context.stopService(intent)
+        }
+    }
+
+    // Sync service state on launch safely
+    LaunchedEffect(Unit) {
+        val enabled = sharedPrefs.getBoolean("shake_enabled", false)
+        val hasLoc = permissions.all {
+            ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+        }
+        if (enabled && hasLoc) {
+            val intent = Intent(context, ShakeMonitorService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        } else if (enabled && !hasLoc) {
+            // Reset disabled service due to missing permissions
+            sharedPrefs.edit().putBoolean("shake_enabled", false).apply()
+            isShakeEnabled = false
+        }
     }
 
     val locationLauncher = rememberLauncherForActivityResult(
@@ -307,12 +323,19 @@ fun HomeScreen(
                         checked = isShakeEnabled,
                         onCheckedChange = { checked ->
                             if (checked) {
-                                if (notificationPermission != null &&
-                                    ContextCompat.checkSelfPermission(context, notificationPermission) != PackageManager.PERMISSION_GRANTED
-                                ) {
-                                    notificationLauncher.launch(notificationPermission)
+                                val hasLoc = permissions.all {
+                                    ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+                                }
+                                if (!hasLoc) {
+                                    Toast.makeText(context, "Please grant Location permission first using the SOS button", Toast.LENGTH_LONG).show()
                                 } else {
-                                    toggleShakeService(true)
+                                    if (notificationPermission != null &&
+                                        ContextCompat.checkSelfPermission(context, notificationPermission) != PackageManager.PERMISSION_GRANTED
+                                    ) {
+                                        notificationLauncher.launch(notificationPermission)
+                                    } else {
+                                        toggleShakeService(true)
+                                    }
                                 }
                             } else {
                                 toggleShakeService(false)

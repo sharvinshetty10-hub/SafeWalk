@@ -53,10 +53,20 @@ class MainActivity : ComponentActivity() {
                                 onNavigateToContacts = {
                                     navController.navigate("contacts")
                                 },
+                                onNavigateToMap = {
+                                    navController.navigate("map")
+                                },
                                 onSignOut = {
                                     navController.navigate("auth") {
                                         popUpTo("home") { inclusive = true }
                                     }
+                                }
+                            )
+                        }
+                        composable("map") {
+                            com.example.safewalk.ui.map.MapScreen(
+                                onNavigateBack = {
+                                    navController.popBackStack()
                                 }
                             )
                         }

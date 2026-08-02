@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -45,6 +46,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun HomeScreen(
     onNavigateToContacts: () -> Unit,
+    onNavigateToMap: () -> Unit,
     onSignOut: () -> Unit
 ) {
     val auth = FirebaseAuth.getInstance()
@@ -375,6 +377,49 @@ fun HomeScreen(
                     ) {
                         Text("Trigger", fontSize = 13.sp)
                     }
+                }
+            }
+
+            // Map Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable { onNavigateToMap() },
+                colors = CardDefaults.cardColors(containerColor = cardBg)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Map,
+                        contentDescription = "Map icon",
+                        tint = accentGreen,
+                        modifier = Modifier.size(36.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Live Safety Map",
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            fontSize = 15.sp
+                        )
+                        Text(
+                            text = "Find nearby police stations & track alerts",
+                            color = Color.Gray,
+                            fontSize = 12.sp
+                        )
+                    }
+                    Text(
+                        text = "→",
+                        color = primaryColor,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
                 }
             }
 

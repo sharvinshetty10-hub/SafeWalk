@@ -6,6 +6,7 @@ import android.hardware.SensorEventListener
 import kotlin.math.abs
 
 class ShakeDetector(
+    private val shakeThreshold: Int,
     private val onShake: () -> Unit
 ) : SensorEventListener {
 
@@ -13,7 +14,6 @@ class ShakeDetector(
     private var lastX = 0f
     private var lastY = 0f
     private var lastZ = 0f
-    private val shakeThreshold = 800
 
     override fun onSensorChanged(event: SensorEvent) {
         val now = System.currentTimeMillis()

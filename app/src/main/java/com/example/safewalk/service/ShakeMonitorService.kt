@@ -46,8 +46,11 @@ class ShakeMonitorService : Service() {
             startForeground(NOTIFICATION_ID, notification)
         }
 
+        val sharedPrefs = getSharedPreferences("safewalk_prefs", Context.MODE_PRIVATE)
+        val threshold = sharedPrefs.getInt("shake_threshold", 800)
+
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        detector = ShakeDetector {
+        detector = ShakeDetector(threshold) {
             serviceScope.launch {
                 sosRepository.triggerSos("shake")
             }

@@ -21,6 +21,9 @@ import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.VolumeUp
+import com.example.safewalk.service.SirenHelper
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -41,6 +44,7 @@ import com.example.safewalk.ui.sos.SosState
 import com.example.safewalk.ui.sos.SosViewModel
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,6 +83,22 @@ fun HomeScreen(
     // Shared preferences to persist the toggle state
     val sharedPrefs = remember { context.getSharedPreferences("safewalk_prefs", Context.MODE_PRIVATE) }
     var isShakeEnabled by remember { mutableStateOf(sharedPrefs.getBoolean("shake_enabled", false)) }
+
+    val coroutineScope = rememberCoroutineScope()
+    val sirenHelper = remember { SirenHelper(context) }
+    var isSirenPlaying by remember { mutableStateOf(false) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
+
+    var fakeCallerName by remember { mutableStateOf(sharedPrefs.getString("fake_caller_name", "Mom") ?: "Mom") }
+    var fakeCallerNumber by remember { mutableStateOf(sharedPrefs.getString("fake_caller_number", "+1 (555) 019-2831") ?: "+1 (555) 019-2831") }
+    var fakeCallDelay by remember { mutableStateOf(sharedPrefs.getInt("fake_call_delay", 0)) }
+    var shakeThreshold by remember { mutableStateOf(sharedPrefs.getInt("shake_threshold", 800)) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            sirenHelper.stopSiren()
+        }
+    }
 
     val toggleShakeService = { enabled: Boolean ->
         isShakeEnabled = enabled
@@ -170,9 +190,17 @@ fun HomeScreen(
                     )
                 },
                 actions = {
+                    IconButton(onClick = { showSettingsDialog = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings Customization",
+                            tint = Color.White
+                        )
+                    }
                     IconButton(onClick = {
                         // Make sure we stop shake monitor service when signing out
                         toggleShakeService(false)
+                        sirenHelper.stopSiren()
                         auth.signOut()
                         onSignOut()
                     }) {
@@ -387,10 +415,22 @@ fun HomeScreen(
                     }
                     Button(
                         onClick = {
-                            val intent = Intent(context, FakeCallActivity::class.java).apply {
-                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            val delaySeconds = sharedPrefs.getInt("fake_call_delay", 0)
+                            if (delaySeconds > 0) {
+                                Toast.makeText(context, "Simulating call in $delaySeconds seconds...", Toast.LENGTH_SHORT).show()
+                                coroutineScope.launch {
+                                    delay(delaySeconds * 1000L)
+                                    val intent = Intent(context, FakeCallActivity::class.java).apply {
+                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                    }
+                                    context.startActivity(intent)
+                                }
+                            } else {
+                                val intent = Intent(context, FakeCallActivity::class.java).apply {
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                }
+                                context.startActivity(intent)
                             }
-                            context.startActivity(intent)
                         },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF2D2D2D),
@@ -400,6 +440,60 @@ fun HomeScreen(
                     ) {
                         Text("Trigger", fontSize = 13.sp)
                     }
+                }
+            }
+
+            // Siren Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp)),
+                colors = CardDefaults.cardColors(containerColor = cardBg)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Icon(
+                            imageVector = Icons.Default.VolumeUp,
+                            contentDescription = "Siren icon",
+                            tint = Color(0xFFCF6679),
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Emergency Siren",
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                fontSize = 15.sp
+                            )
+                            Text(
+                                text = "Emit a loud sound to deter threats",
+                                color = Color.Gray,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = isSirenPlaying,
+                        onCheckedChange = { checked ->
+                            isSirenPlaying = checked
+                            if (checked) {
+                                sirenHelper.startSiren()
+                            } else {
+                                sirenHelper.stopSiren()
+                            }
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFFCF6679),
+                            checkedTrackColor = Color(0xFFCF6679).copy(alpha = 0.5f)
+                        )
+                    )
                 }
             }
 
@@ -500,6 +594,98 @@ fun HomeScreen(
                 fontSize = 11.sp,
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center
+            )
+        }
+
+        if (showSettingsDialog) {
+            AlertDialog(
+                onDismissRequest = { showSettingsDialog = false },
+                title = { Text("SafeWalk Settings", fontWeight = FontWeight.Bold, color = Color.White) },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text("Fake Call Configuration", fontWeight = FontWeight.Bold, color = primaryColor, fontSize = 14.sp)
+                        
+                        OutlinedTextField(
+                            value = fakeCallerName,
+                            onValueChange = { fakeCallerName = it },
+                            label = { Text("Caller Display Name") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        OutlinedTextField(
+                            value = fakeCallerNumber,
+                            onValueChange = { fakeCallerNumber = it },
+                            label = { Text("Caller Display Number") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Text("Fake Call Delay", fontWeight = FontWeight.Bold, color = primaryColor, fontSize = 14.sp)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            listOf(0 to "Immediate", 10 to "10s", 30 to "30s").forEach { (seconds, label) ->
+                                FilterChip(
+                                    selected = fakeCallDelay == seconds,
+                                    onClick = { fakeCallDelay = seconds },
+                                    label = { Text(label) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = primaryColor,
+                                        selectedLabelColor = Color.Black
+                                    )
+                                )
+                            }
+                        }
+
+                        Text("Shake Sensitivity", fontWeight = FontWeight.Bold, color = primaryColor, fontSize = 14.sp)
+                        val sensitivityLabel = when {
+                            shakeThreshold < 600 -> "High Sensitivity (Easy Trigger)"
+                            shakeThreshold <= 1000 -> "Medium Sensitivity (Default)"
+                            else -> "Low Sensitivity (Hard Trigger)"
+                        }
+                        Text(text = "Threshold: $shakeThreshold ($sensitivityLabel)", color = Color.LightGray, fontSize = 12.sp)
+                        Slider(
+                            value = shakeThreshold.toFloat(),
+                            onValueChange = { shakeThreshold = it.toInt() },
+                            valueRange = 300f..1800f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = primaryColor,
+                                activeTrackColor = primaryColor
+                            )
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            sharedPrefs.edit().apply {
+                                putString("fake_caller_name", fakeCallerName)
+                                putString("fake_caller_number", fakeCallerNumber)
+                                putInt("fake_call_delay", fakeCallDelay)
+                                putInt("shake_threshold", shakeThreshold)
+                                apply()
+                            }
+                            Toast.makeText(context, "Settings saved", Toast.LENGTH_SHORT).show()
+                            showSettingsDialog = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = primaryColor, contentColor = Color.Black)
+                    ) {
+                        Text("Save")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showSettingsDialog = false }) {
+                        Text("Cancel", color = Color.LightGray)
+                    }
+                },
+                containerColor = cardBg
             )
         }
     }

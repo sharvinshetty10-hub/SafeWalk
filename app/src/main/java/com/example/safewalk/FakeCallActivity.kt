@@ -73,6 +73,10 @@ class FakeCallActivity : ComponentActivity() {
             vibrator?.vibrate(pattern, 0)
         }
 
+        val sharedPrefs = getSharedPreferences("safewalk_prefs", Context.MODE_PRIVATE)
+        val name = sharedPrefs.getString("fake_caller_name", "Mom") ?: "Mom"
+        val number = sharedPrefs.getString("fake_caller_number", "+1 (555) 019-2831") ?: "+1 (555) 019-2831"
+
         setContent {
             SafeWalkTheme {
                 Surface(
@@ -80,7 +84,8 @@ class FakeCallActivity : ComponentActivity() {
                     color = Color(0xFF0F0F0F)
                 ) {
                     FakeIncomingCallScreen(
-                        callerName = "Mom",
+                        callerName = name,
+                        callerNumber = number,
                         onAnswer = {
                             stopAlerts()
                             finish()
@@ -113,6 +118,7 @@ class FakeCallActivity : ComponentActivity() {
 @Composable
 fun FakeIncomingCallScreen(
     callerName: String,
+    callerNumber: String,
     onAnswer: () -> Unit,
     onDecline: () -> Unit
 ) {
@@ -150,10 +156,16 @@ fun FakeIncomingCallScreen(
                 fontWeight = FontWeight.Bold,
                 color = Color.White
             )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = callerNumber,
+                fontSize = 16.sp,
+                color = Color.LightGray
+            )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "Incoming call...",
-                fontSize = 16.sp,
+                fontSize = 14.sp,
                 color = Color.Gray
             )
         }
